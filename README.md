@@ -75,12 +75,21 @@ This repo is the project root, so no "Root Directory" override is needed.
 
 4. **Deploy.**
 
-`vercel.json` is committed and handles the two things a static SPA needs:
+`vercel.json` is committed and handles three things:
 
-- a rewrite so deep links like `/parcels/PF-YUH5F-P6VFX` reach `index.html` instead of 404ing —
-  without it, every URL except `/` breaks on refresh;
-- cache headers: `index.html` revalidates every time, `/assets/*` (content-hashed) is immutable
+- **`/api/:path*` → the Render API.** Requests become first-party, so ad-blocker filter lists and
+  enterprise URL-blocklist rules that target `onrender.com` no longer match them — and CORS stops
+  applying at all. See [Client-side blocking](#client-side-blocking).
+- **SPA fallback** (`/((?!api/).*)` → `/index.html`) so deep links like `/parcels/PF-YUH5F-P6VFX`
+  reach `index.html` instead of 404ing — without it, every URL except `/` breaks on refresh. It
+  excludes `/api` so it can never shadow the proxy, and it is listed *after* the proxy because the
+  first matching rewrite wins.
+- **cache headers:** `index.html` revalidates every time, `/assets/*` (content-hashed) is immutable
   for a year.
+
+Keep that reasoning here rather than in the file: Vercel validates `vercel.json` against a strict
+schema that rejects unknown keys, so a `"comment"` field inside a rewrite fails the build with
+``The `vercel.json` schema validation failed`` — and plain JSON has no comment syntax either.
 
 ## Connecting to the Render backend
 
