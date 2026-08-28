@@ -1,20 +1,25 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+    {
+      "comment": "Proxy the API through this origin. Requests become first-party, so ad-blocker filter lists and enterprise URLBlocklist rules that target onrender.com no longer match them — and CORS stops applying at all. Must be listed before the SPA fallback: the first matching rewrite wins.",
+      "source": "/api/:path*",
+      "destination": "https://parcelflowapi.onrender.com/:path*"
+    },
+    {
+      "comment": "SPA fallback so deep links like /parcels/PF-YUH5F-P6VFX reach index.html instead of 404ing. Excludes /api so it can never shadow the proxy above.",
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
       "source": "/index.html",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     },
     {
       "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     }
   ]
 }

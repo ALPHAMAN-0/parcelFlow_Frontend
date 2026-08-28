@@ -44,16 +44,32 @@ To develop against a local API instead, set `VITE_API_BASE_URL=http://localhost:
 One variable:
 
 ```
+VITE_API_BASE_URL=/api
+```
+
+`/api` is **same-origin**: `vercel.json` rewrites `/api/*` to the Render service, and
+`vite.config.ts` mirrors that for local dev. Requests therefore leave the browser as
+`your-site.vercel.app/api/health`, never as `parcelflowapi.onrender.com/health`.
+
+That indirection is not cosmetic. A direct cross-origin call to `onrender.com` is blocked outright
+by some ad-blocker filter lists and by corporate `URLBlocklist` policies — free-hosting domains get
+blanket-blocked because they are abused. The browser reports `net::ERR_BLOCKED_BY_CLIENT`, the
+request never leaves the machine, and **every** API call fails: login included, not just the health
+dot. A first-party path cannot be singled out that way. This was a real failure, not a hypothetical.
+
+A direct URL still works if you prefer it:
+
+```
 VITE_API_BASE_URL=https://parcelflowapi.onrender.com
 ```
 
-No trailing slash, no path. **Vite inlines `VITE_*` variables at build time, not run time** — the
-value is baked into the JS bundle. Changing it on Vercel therefore needs a **redeploy**; saving the
-variable alone does nothing.
+Leaving the variable unset falls back to `/api`.
+
+**Vite inlines `VITE_*` at build time, not run time** — the value is baked into the JS bundle.
+Changing it on Vercel therefore needs a **redeploy**; saving the variable alone does nothing.
 
 The footer of every page shows the API host it resolved, with a live health dot. That is the
-quickest way to confirm a deployment picked up the right value: if it says `localhost:3000`, the
-build did not see the variable.
+quickest way to confirm a deployment picked up the right value.
 
 ## Deploying to Vercel
 
@@ -69,7 +85,7 @@ This repo is the project root, so no "Root Directory" override is needed.
 
    | Key | Value |
    |---|---|
-   | `VITE_API_BASE_URL` | `https://parcelflowapi.onrender.com` |
+   | `VITE_API_BASE_URL` | `/api` |
 
 4. **Deploy.**
 
@@ -82,24 +98,41 @@ This repo is the project root, so no "Root Directory" override is needed.
 
 ## Connecting to the Render backend
 
-Nothing has to change on the API side. Two reasons:
+Nothing has to change on the API side. The wiring lives entirely in `vercel.json`:
 
-**CORS is already open.** `ParcelFlowApi/src/app.js` uses bare `app.use(cors())`, so the API answers
-`Access-Control-Allow-Origin: *`. A preflight from a `.vercel.app` origin returns `204` with
-`Access-Control-Allow-Headers: content-type, authorization`. Verified directly:
-
-```bash
-curl -i -X OPTIONS https://parcelflowapi.onrender.com/auth/login \
-  -H "Origin: https://your-app.vercel.app" \
-  -H "Access-Control-Request-Method: POST" \
-  -H "Access-Control-Request-Headers: content-type,authorization"
+```json
+{ "source": "/api/:path*", "destination": "https://parcelflowapi.onrender.com/:path*" }
 ```
 
-**No cookies are involved.** Auth is a `Authorization: Bearer <jwt>` header, and the client sends
-`credentials: 'omit'`. A wildcard `Access-Control-Allow-Origin` forbids credentialed requests, so a
-cookie-based client would have needed an API change; this one does not.
+Vercel proxies the request at its edge, forwarding method, body and headers — verified with a
+`POST /api/auth/login` (200, token returned) and an authenticated `GET /api/admin/stats` (200).
+Because the browser only ever talks to its own origin, **CORS does not apply at all** and no
+preflight is sent.
 
-So connecting the two is exactly one step: set `VITE_API_BASE_URL` to the Render URL and redeploy.
+If you switch to a direct cross-origin URL instead, it also works unchanged: `ParcelFlowApi`
+uses bare `app.use(cors())`, so it answers `Access-Control-Allow-Origin: *`, and auth is an
+`Authorization: Bearer` header rather than a cookie (the client sends `credentials: 'omit'`, since a
+wildcard origin forbids credentialed requests).
+
+### Known trade-off: shared rate limiting
+
+The proxy has one real cost, measured rather than assumed. The API keys its rate limiter on
+`cf-connecting-ip`, which Cloudflare sets to whoever connects *directly*. Behind the proxy that is
+Vercel's edge, not the visitor — so all visitors share one bucket:
+
+| Limit | Per visitor (direct) | Shared (proxied) |
+|---|---|---|
+| Login | 10 / 15 min | 10 / 15 min **total** |
+| Tracking lookup | 60 / min | 60 / min **total** |
+
+Confirmed by probing: spoofing `x-forwarded-for` does not move the bucket (`r=57 → r=56 → r=55`,
+one continuous counter), and `cf-connecting-ip` cannot be spoofed from outside — Cloudflare answers
+403. Fixing this properly would mean changing the API's `keyGenerator`, which is out of scope for
+this repo.
+
+Fine for a demo. If you need per-visitor limits back, the clean fix is a **custom domain** for the
+API (`api.yourdomain.com` → Render): blocklists targeting `onrender.com` stop matching *and*
+requests go direct, so the real client IP is preserved. Then set `VITE_API_BASE_URL` to it.
 
 ### Cold starts
 
@@ -231,8 +264,10 @@ failure during that check keeps the cached session rather than signing the user 
 
 | Symptom | Cause |
 |---|---|
-| Footer shows `localhost:3000` on a deployed build | `VITE_API_BASE_URL` was missing at build time. Set it and **redeploy** — saving alone is not enough. |
+| `net::ERR_BLOCKED_BY_CLIENT` on every API call | An ad blocker or a corporate `URLBlocklist` is blocking the request client-side. Confirm at `chrome://policy`. Fixed by the `/api` proxy — make sure `VITE_API_BASE_URL` is `/api` and you have redeployed. |
+| Footer shows the wrong host on a deployed build | `VITE_API_BASE_URL` changed but the build did not. **Redeploy** — saving the variable alone is not enough, Vite inlines it at build time. |
 | First request after idle takes ~a minute | Render free-tier cold start. The amber banner is expected; it resolves itself. |
 | Refreshing `/parcels/PF-…` 404s | The SPA rewrite in `vercel.json` is not being applied. Confirm the file is committed and the output directory is `dist`. |
+| `/api/...` returns Vercel's 404 page | The `/api/:path*` rewrite is missing or listed *after* the SPA fallback. The first matching rewrite wins, so it must come first. |
 | "Too many sign-in attempts" | The API allows 10 logins per 15 minutes per IP. Wait it out. |
 | Every filter returns a validation error | Something is serialising empty params. Filters must be omitted when blank, not sent as `''`. |

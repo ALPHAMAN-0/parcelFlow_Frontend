@@ -8,7 +8,20 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // Mirrors the /api rewrite in vercel.json so local dev and production
+    // resolve the API the same way. Without this, VITE_API_BASE_URL=/api would
+    // hit the Vite dev server and 404.
+    proxy: {
+      '/api': {
+        target: 'https://parcelflowapi.onrender.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
