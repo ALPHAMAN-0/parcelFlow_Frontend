@@ -44,32 +44,18 @@ To develop against a local API instead, set `VITE_API_BASE_URL=http://localhost:
 One variable:
 
 ```
-VITE_API_BASE_URL=/api
-```
-
-`/api` is **same-origin**: `vercel.json` rewrites `/api/*` to the Render service, and
-`vite.config.ts` mirrors that for local dev. Requests therefore leave the browser as
-`your-site.vercel.app/api/health`, never as `parcelflowapi.onrender.com/health`.
-
-That indirection is not cosmetic. A direct cross-origin call to `onrender.com` is blocked outright
-by some ad-blocker filter lists and by corporate `URLBlocklist` policies — free-hosting domains get
-blanket-blocked because they are abused. The browser reports `net::ERR_BLOCKED_BY_CLIENT`, the
-request never leaves the machine, and **every** API call fails: login included, not just the health
-dot. A first-party path cannot be singled out that way. This was a real failure, not a hypothetical.
-
-A direct URL still works if you prefer it:
-
-```
 VITE_API_BASE_URL=https://parcelflowapi.onrender.com
 ```
 
-Leaving the variable unset falls back to `/api`.
+No trailing slash, no path. **Vite inlines `VITE_*` at build time, not run time** — the value is
+baked into the JS bundle, so changing it on Vercel needs a **redeploy**; saving the variable alone
+does nothing.
 
-**Vite inlines `VITE_*` at build time, not run time** — the value is baked into the JS bundle.
-Changing it on Vercel therefore needs a **redeploy**; saving the variable alone does nothing.
+Leaving it unset falls back to `/api`, the same-origin proxy described under
+[Client-side blocking](#client-side-blocking).
 
-The footer of every page shows the API host it resolved, with a live health dot. That is the
-quickest way to confirm a deployment picked up the right value.
+The footer of every page shows the API host it resolved, with a live health dot — the quickest way
+to confirm a deployment picked up the right value.
 
 ## Deploying to Vercel
 
@@ -85,7 +71,7 @@ This repo is the project root, so no "Root Directory" override is needed.
 
    | Key | Value |
    |---|---|
-   | `VITE_API_BASE_URL` | `/api` |
+   | `VITE_API_BASE_URL` | `https://parcelflowapi.onrender.com` |
 
 4. **Deploy.**
 
@@ -98,41 +84,68 @@ This repo is the project root, so no "Root Directory" override is needed.
 
 ## Connecting to the Render backend
 
-Nothing has to change on the API side. The wiring lives entirely in `vercel.json`:
+Nothing has to change on the API side. Set `VITE_API_BASE_URL` to the Render URL and redeploy.
+Two reasons it just works:
+
+**CORS is already open.** `ParcelFlowApi/src/app.js` uses bare `app.use(cors())`, so the API answers
+`Access-Control-Allow-Origin: *`. A preflight from a `.vercel.app` origin returns `204` with
+`Access-Control-Allow-Headers: content-type, authorization`.
+
+**No cookies are involved.** Auth is an `Authorization: Bearer <jwt>` header and the client sends
+`credentials: 'omit'`. A wildcard allow-origin forbids credentialed requests, so a cookie-based
+client would have needed an API change; this one does not.
+
+## Client-side blocking
+
+Worth knowing about, because it cost real debugging time.
+
+**EasyPrivacy** — on by default in Brave Shields, uBlock Origin and AdGuard — contains:
+
+```
+||onrender.com/health
+```
+
+`||` is a domain anchor covering every subdomain, so that rule blocks `/health` **and**
+`/health/db` on any `*.onrender.com` host. The browser refuses the request itself
+(`net::ERR_BLOCKED_BY_CLIENT`); nothing reaches the server, so no log shows it.
+
+Two things follow:
+
+- The footer's liveness probe therefore uses **`GET /`**, not `/health`. Same envelope, also never
+  touches the database, and matches no rule in EasyList, EasyPrivacy or uBlock's lists. There is a
+  comment saying so in `src/api/health.ts` — don't tidy it back.
+- **The rest of the API was never affected.** The rules on this domain are path-scoped
+  (`||onrender.com/health`, and `||onrender.com/api/ads/` in EasyList); there is no domain-wide
+  block. `/auth/*`, `/parcels*` and `/admin/*` all pass. Login and every screen work with Shields up.
+
+### If blockers ever target more than /health
+
+`vercel.json` already carries an inert escape hatch:
 
 ```json
 { "source": "/api/:path*", "destination": "https://parcelflowapi.onrender.com/:path*" }
 ```
 
-Vercel proxies the request at its edge, forwarding method, body and headers — verified with a
-`POST /api/auth/login` (200, token returned) and an authenticated `GET /api/admin/stats` (200).
-Because the browser only ever talks to its own origin, **CORS does not apply at all** and no
-preflight is sent.
+Switch `VITE_API_BASE_URL` to `/api` and redeploy. Every request then leaves the browser as
+same-origin, so no filter list or corporate `URLBlocklist` can match it, and CORS stops applying
+altogether. `vite.config.ts` mirrors the rewrite for local dev.
 
-If you switch to a direct cross-origin URL instead, it also works unchanged: `ParcelFlowApi`
-uses bare `app.use(cors())`, so it answers `Access-Control-Allow-Origin: *`, and auth is an
-`Authorization: Bearer` header rather than a cookie (the client sends `credentials: 'omit'`, since a
-wildcard origin forbids credentialed requests).
+**It is not free, which is why it is not the default.** The API keys its rate limiter on
+`cf-connecting-ip`, which Cloudflare sets to whoever connects *directly* — behind the proxy that is
+Vercel's edge, not the visitor. All visitors then share one bucket:
 
-### Known trade-off: shared rate limiting
-
-The proxy has one real cost, measured rather than assumed. The API keys its rate limiter on
-`cf-connecting-ip`, which Cloudflare sets to whoever connects *directly*. Behind the proxy that is
-Vercel's edge, not the visitor — so all visitors share one bucket:
-
-| Limit | Per visitor (direct) | Shared (proxied) |
+| Limit | Direct | Proxied |
 |---|---|---|
-| Login | 10 / 15 min | 10 / 15 min **total** |
-| Tracking lookup | 60 / min | 60 / min **total** |
+| Login | 10 / 15 min per visitor | 10 / 15 min **total** |
+| Tracking lookup | 60 / min per visitor | 60 / min **total** |
 
-Confirmed by probing: spoofing `x-forwarded-for` does not move the bucket (`r=57 → r=56 → r=55`,
-one continuous counter), and `cf-connecting-ip` cannot be spoofed from outside — Cloudflare answers
-403. Fixing this properly would mean changing the API's `keyGenerator`, which is out of scope for
-this repo.
+Verified by probing: spoofing `x-forwarded-for` does not move the counter (`r=57 → r=56 → r=55`,
+one continuous bucket) and `cf-connecting-ip` cannot be spoofed from outside — Cloudflare answers
+403. Fixing it properly means changing the API's `keyGenerator`, which is out of scope here.
 
-Fine for a demo. If you need per-visitor limits back, the clean fix is a **custom domain** for the
-API (`api.yourdomain.com` → Render): blocklists targeting `onrender.com` stop matching *and*
-requests go direct, so the real client IP is preserved. Then set `VITE_API_BASE_URL` to it.
+The clean alternative is a **custom domain** for the API (`api.yourdomain.com` → Render): filter
+rules scoped to `onrender.com` stop matching *and* requests stay direct, so per-visitor limits
+survive.
 
 ### Cold starts
 
@@ -264,7 +277,8 @@ failure during that check keeps the cached session rather than signing the user 
 
 | Symptom | Cause |
 |---|---|
-| `net::ERR_BLOCKED_BY_CLIENT` on every API call | An ad blocker or a corporate `URLBlocklist` is blocking the request client-side. Confirm at `chrome://policy`. Fixed by the `/api` proxy — make sure `VITE_API_BASE_URL` is `/api` and you have redeployed. |
+| `net::ERR_BLOCKED_BY_CLIENT` on `/health` | Expected with Brave Shields / uBlock / AdGuard: EasyPrivacy blocks `||onrender.com/health`. The probe now uses `GET /` instead, so this should no longer appear. See [Client-side blocking](#client-side-blocking). |
+| `ERR_BLOCKED_BY_CLIENT` on `/auth` or `/parcels` too | A blocker is targeting more than the health paths. Switch `VITE_API_BASE_URL` to `/api` and redeploy. |
 | Footer shows the wrong host on a deployed build | `VITE_API_BASE_URL` changed but the build did not. **Redeploy** — saving the variable alone is not enough, Vite inlines it at build time. |
 | First request after idle takes ~a minute | Render free-tier cold start. The amber banner is expected; it resolves itself. |
 | Refreshing `/parcels/PF-…` 404s | The SPA rewrite in `vercel.json` is not being applied. Confirm the file is committed and the output directory is `dist`. |

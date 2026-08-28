@@ -12,8 +12,10 @@ export function useColdStart(): boolean {
 }
 
 /**
- * Backend reachability for the footer indicator. /health never queries the
- * database, so polling it is cheap.
+ * Backend reachability for the footer indicator. The probe is GET / rather
+ * than GET /health — see src/api/health.ts for why (an EasyPrivacy rule blocks
+ * /health on onrender.com). Neither endpoint touches the database, so polling
+ * is cheap either way.
  *
  * Two intervals, not one. While the API is answering, poll rarely — on Render's
  * free tier every request resets the idle timer, so there is no reason to chat.
@@ -47,7 +49,7 @@ export function useApiHealth() {
      * instead of making a claim that is about to be wrong.
      */
     isWaking,
-    uptimeSeconds: query.data?.uptimeSeconds ?? null,
     failed: query.isError,
+    version: query.data?.version ?? null,
   };
 }
