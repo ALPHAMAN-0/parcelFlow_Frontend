@@ -9,9 +9,20 @@ import { cn } from '@/lib/cn';
  * this makes that visible instead of mysterious.
  */
 export function ApiStatusFooter() {
-  const { isOnline, isChecking, failed } = useApiHealth();
+  const { isOnline, isChecking, isWaking, failed } = useApiHealth();
 
-  const state = failed ? 'offline' : isOnline ? 'online' : isChecking ? 'checking' : 'unknown';
+  // Order matters. "waking" outranks "offline" because a cold-starting Render
+  // instance is not unreachable, it is booting — and saying otherwise is a
+  // claim that will be wrong within the minute.
+  const state = isOnline
+    ? 'online'
+    : isWaking
+      ? 'waking'
+      : failed
+        ? 'offline'
+        : isChecking
+          ? 'checking'
+          : 'unknown';
 
   return (
     <footer className="border-t border-[var(--border-subtle)] px-4 py-3 sm:px-6">
@@ -26,6 +37,7 @@ export function ApiStatusFooter() {
               'size-1.5 rounded-full',
               state === 'online' && 'bg-emerald-500',
               state === 'offline' && 'bg-rose-500',
+              state === 'waking' && 'animate-pulse bg-amber-500',
               state === 'checking' && 'animate-pulse bg-amber-500',
               state === 'unknown' && 'bg-slate-400',
             )}
@@ -43,7 +55,9 @@ export function ApiStatusFooter() {
             </a>
             <span className="ml-1.5 opacity-70">
               {state === 'online' && 'reachable'}
-              {state === 'offline' && 'unreachable'}
+              {state === 'waking' && 'waking up…'}
+              {/* Says "retrying" because it is: the poll drops to 8s on failure. */}
+              {state === 'offline' && 'unreachable — retrying'}
               {state === 'checking' && 'checking…'}
             </span>
           </span>
