@@ -1,0 +1,167 @@
+@import 'tailwindcss';
+
+/* Tailwind 4 is CSS-first: the design system lives here, not in a JS config. */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --color-brand-50: oklch(0.97 0.014 275);
+  --color-brand-100: oklch(0.94 0.03 275);
+  --color-brand-200: oklch(0.88 0.06 275);
+  --color-brand-300: oklch(0.8 0.1 275);
+  --color-brand-400: oklch(0.7 0.15 275);
+  --color-brand-500: oklch(0.6 0.19 275);
+  --color-brand-600: oklch(0.52 0.21 275);
+  --color-brand-700: oklch(0.45 0.19 275);
+  --color-brand-800: oklch(0.38 0.15 275);
+  --color-brand-900: oklch(0.31 0.11 275);
+}
+
+/* Class-based dark mode: index.html sets .dark before first paint, and the
+   toggle flips it. Not a media query, so a manual choice can beat the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --surface: oklch(0.99 0.002 275);
+    --surface-raised: oklch(1 0 0);
+    --surface-sunken: oklch(0.97 0.004 275);
+    --border-subtle: oklch(0.91 0.006 275);
+    --text-strong: oklch(0.24 0.02 275);
+    --text-muted: oklch(0.52 0.015 275);
+  }
+
+  .dark {
+    --surface: oklch(0.19 0.017 275);
+    --surface-raised: oklch(0.24 0.02 275);
+    --surface-sunken: oklch(0.16 0.015 275);
+    --border-subtle: oklch(0.32 0.02 275);
+    --text-strong: oklch(0.97 0.005 275);
+    --text-muted: oklch(0.71 0.015 275);
+  }
+
+  * {
+    border-color: var(--border-subtle);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--surface);
+    color: var(--text-strong);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Visible only for keyboard users, so mouse clicks don't leave rings behind. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+
+  ::selection {
+    background-color: var(--color-brand-200);
+    color: var(--color-brand-900);
+  }
+
+  .dark ::selection {
+    background-color: var(--color-brand-700);
+    color: white;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .surface {
+    background-color: var(--surface-raised);
+  }
+  .surface-sunken {
+    background-color: var(--surface-sunken);
+  }
+  .text-muted {
+    color: var(--text-muted);
+  }
+  .border-subtle {
+    border-color: var(--border-subtle);
+  }
+
+  /* Skip link: first tab stop, invisible until focused. */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    z-index: 100;
+  }
+  .skip-link:focus {
+    left: 1rem;
+    top: 1rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--color-brand-600);
+    color: white;
+    border-radius: 0.5rem;
+  }
+}
+
+@layer utilities {
+  .animate-in {
+    animation: fade-in 0.2s ease-out;
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .animate-slide-in {
+    animation: slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(12px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .shimmer {
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklch, var(--text-muted) 12%, transparent),
+      transparent
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+}
