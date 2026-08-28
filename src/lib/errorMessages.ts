@@ -45,8 +45,11 @@ const MESSAGES: Record<string, string> = {
   INTERNAL_ERROR: 'Something went wrong on the server. Try again shortly.',
 
   // client-side
+  // A fetch that never gets a reply is indistinguishable in JS from one an
+  // extension refused (both surface as TypeError: Failed to fetch), so the copy
+  // names all three real causes instead of guessing one.
   [CLIENT_ERROR_CODES.NETWORK]:
-    'Could not reach the API. Check your connection, or the backend may still be waking up.',
+    'Could not reach the API. An ad blocker or privacy extension may be blocking it, the backend may still be waking up, or your connection may be down.',
   [CLIENT_ERROR_CODES.TIMEOUT]:
     'The API took too long to respond. If it has been idle it may be waking up — try again.',
   [CLIENT_ERROR_CODES.MALFORMED]: 'The API returned something this app could not read.',

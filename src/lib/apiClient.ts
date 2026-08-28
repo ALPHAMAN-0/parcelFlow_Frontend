@@ -141,7 +141,7 @@ async function attempt<T>(
       code: timedOut ? CLIENT_ERROR_CODES.TIMEOUT : CLIENT_ERROR_CODES.NETWORK,
       message: timedOut
         ? `The API did not respond within ${Math.round(timeoutMs / 1000)}s.`
-        : 'Could not reach the API. Check your connection and that the backend is running.',
+        : 'Could not reach the API. This is also what an ad blocker or privacy extension looks like — the browser reports ERR_BLOCKED_BY_CLIENT and fetch cannot tell the difference.',
     });
   }
   cleanup();
