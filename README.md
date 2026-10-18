@@ -3,6 +3,18 @@
 Web client for the [ParcelFlow API](https://github.com/ALPHAMAN-0/ParcelFlowApi) — parcel delivery
 management with three roles, a strictly linear status flow, and an append-only audit trail.
 
+## Architecture / How it Works
+
+```mermaid
+flowchart LR
+    A[User] --> B[Parcelflow Frontend]
+    B --> C{Logic}
+    C --> D[(Data)]
+    C --> E[Output]
+    D --> C
+```
+
+
 A static single-page app: Vite 6, React 19, TypeScript, Tailwind CSS 4, React Router 7,
 TanStack Query 5. No backend of its own — it talks to the API over HTTPS with a Bearer token.
 
