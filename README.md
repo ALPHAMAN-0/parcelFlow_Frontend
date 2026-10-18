@@ -6,12 +6,22 @@ management with three roles, a strictly linear status flow, and an append-only a
 ## Architecture / How it Works
 
 ```mermaid
-flowchart LR
-    A[User] --> B[Parcelflow Frontend]
-    B --> C{Logic}
-    C --> D[(Data)]
-    C --> E[Output]
-    D --> C
+flowchart TD
+  Main --> App
+  Main --> Hooks
+  Main --> UI
+  App --> Pages
+  App --> Layout
+  Pages --> ParcelsUI
+  Pages --> AdminUI
+  Pages --> UI
+  Pages --> Hooks
+  Layout --> UI
+  ParcelsUI --> UI
+  AdminUI --> UI
+  Hooks --> Api
+  Hooks --> Domain
+  Api --> ApiClient
 ```
 
 
