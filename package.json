@@ -5,16 +5,14 @@
   "type": "module",
   "description": "Web client for the ParcelFlow parcel delivery API",
   "scripts": {
-    "dev": "node init && vite",
-    "build": "node init && tsc -b && vite build",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
     "preview": "vite preview --port 4173",
     "lint": "eslint .",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.7",
-    "dotenv": "^8.2.0",
-    "node-fetch": "^3.3.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1",
